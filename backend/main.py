@@ -26,7 +26,7 @@ def list_incidents():
     return incidents_db
 
 @app.post("/api/incidents", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED, tags=["Incidents"])
-def register_incident(incident: IncidentCreate):
+async def register_incident(incident: IncidentCreate):
     new_id = len(incidents_db) + 1
     record = {
         "id": new_id,
@@ -39,7 +39,7 @@ def register_incident(incident: IncidentCreate):
     incidents_db.append(record)
 
     # Відправка оперативного алерту
-    send_telegram_alert(
+    await send_telegram_alert(
         source_ip=incident.source_ip,
         username=incident.username,
         event_type=incident.event_type,

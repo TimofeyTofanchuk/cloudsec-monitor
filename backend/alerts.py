@@ -1,32 +1,51 @@
 import os
-import requests
+import httpx
+from pathlib import Path
+from dotenv import load_dotenv
 
-def send_telegram_alert(source_ip: str, username: str, event_type: str, details: str):
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
-    if not bot_token or not chat_id:
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+async def send_telegram_alert(*args, **kwargs) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("[WARNING] Telegram credentials not set. Alert skipped.")
         return False
 
-    message = (
-        f"🚨 <b>СИСТЕМА БЕЗПЕКИ CLOUDSEC</b> 🚨\n\n"
-        f"<b>Подія:</b> <code>{event_type}</code>\n"
-        f"<b>Джерело (IP):</b> <code>{source_ip}</code>\n"
-        f"<b>Користувач:</b> <code>{username}</code>\n"
-        f"<b>Опис:</b> {details}\n"
+    source_ip = kwargs.get("source_ip", "Unknown")
+    username = kwargs.get("username", "Unknown")
+    event_type = kwargs.get("event_type", "INCIDENT")
+    details = kwargs.get("details", "No details")
+    timestamp = kwargs.get("timestamp", "Just now")
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+    text = (
+        f"🚨 <b>CloudSec Alert: {event_type}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"<b>Source IP:</b> <code>{source_ip}</code>\n"
+        f"<b>Target User:</b> <code>{username}</code>\n"
+        f"<b>Details:</b> {details}\n"
+        f"<b>Time:</b> {timestamp}"
     )
 
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
-        "chat_id": chat_id,
-        "text": message,
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
         "parse_mode": "HTML"
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=5)
-        return response.status_code == 200
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code == 200:
+                print("[INFO] Telegram alert sent successfully.")
+                return True
+            else:
+                print(f"[ERROR] Telegram API failed: {response.text}")
+                return False
     except Exception as e:
-        print(f"[ERROR] Failed to send alert: {e}")
+        print(f"[ERROR] Connection error: {e}")
         return False
